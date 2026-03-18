@@ -1,7 +1,6 @@
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } = require("discord.js")
 const fs = require("fs")
 
-client.login(process.env.TOKEN)
 const CLIENT_ID = "1483191419135856722"
 
 const client = new Client({
@@ -486,4 +485,4 @@ member.roles.remove(role).catch(()=>{})
 
 },60000)
 
-client.login(TOKEN)
+client.login(process.env.TOKEN)
