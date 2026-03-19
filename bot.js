@@ -1,178 +1,237 @@
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } = require('discord.js')
 const fs = require('fs')
 
-// 🔥 PREVENT CRASHES
-process.on('unhandledRejection', console.error)
-
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
+  intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMembers]
 })
 
 const CLIENT_ID = "1483191419135856722"
 
-// Load data
+// load files
 let birthdays = fs.existsSync('./birthdays.json')
-  ? JSON.parse(fs.readFileSync('./birthdays.json', 'utf8'))
-  : {}
+? JSON.parse(fs.readFileSync('./birthdays.json','utf8'))
+: {}
 
 let settings = fs.existsSync('./settings.json')
-  ? JSON.parse(fs.readFileSync('./settings.json', 'utf8'))
-  : { birthdayChannel: null, birthdayRole: null, timezone: "America/New_York" }
+? JSON.parse(fs.readFileSync('./settings.json','utf8'))
+: {birthdayChannel:null,birthdayRole:null,controlRoles:[]}
 
-function saveBirthdays() {
-  fs.writeFileSync('./birthdays.json', JSON.stringify(birthdays, null, 2))
-}
+// save functions
+function saveBirthdays(){fs.writeFileSync('./birthdays.json',JSON.stringify(birthdays,null,2))}
+function saveSettings(){fs.writeFileSync('./settings.json',JSON.stringify(settings,null,2))}
 
-function saveSettings() {
-  fs.writeFileSync('./settings.json', JSON.stringify(settings, null, 2))
-}
-
-// Formatting
-const months = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+// helpers
+function cap(str){return str.charAt(0).toUpperCase()+str.slice(1)}
 
 function suffix(d){
-  if(d%10===1 && d!==11)return "st"
-  if(d%10===2 && d!==12)return "nd"
-  if(d%10===3 && d!==13)return "rd"
-  return "th"
+if(d%10===1 && d!==11)return "st"
+if(d%10===2 && d!==12)return "nd"
+if(d%10===3 && d!==13)return "rd"
+return "th"
 }
+
+const months=["January","February","March","April","May","June","July","August","September","October","November","December"]
 
 function formatDate(m,d){
-  return `${months[m-1]} ${d}${suffix(d)}`
+return `${months[m-1]} ${d}${suffix(d)}`
 }
 
-// 🔥 FIXED DAYS FUNCTION
-function daysUntil(m, d) {
-  const now = new Date().toLocaleString("en-US", { timeZone: settings.timezone })
-  const today = new Date(now)
-  today.setHours(0,0,0,0)
+function daysUntil(m,d){
+const now=new Date()
+const target=new Date(now.getFullYear(),m-1,d)
 
-  let next = new Date(today.getFullYear(), m - 1, d)
-  next.setHours(0,0,0,0)
+if(target<now) target.setFullYear(target.getFullYear()+1)
 
-  if (next < today) next.setFullYear(today.getFullYear() + 1)
-
-  return Math.round((next - today) / (1000 * 60 * 60 * 24))
+return Math.ceil((target-now)/(1000*60*60*24))
 }
 
-function embed(title, desc) {
-  return new EmbedBuilder().setColor("#2b7fff").setTitle(title).setDescription(desc)
+function embed(title,desc){
+return new EmbedBuilder()
+.setColor("#2b7fff")
+.setTitle(title)
+.setDescription(desc)
 }
 
-// Commands
+// COMMANDS
 const commands = [
-  new SlashCommandBuilder().setName("addbirthday").setDescription("Set your birthday")
-    .addIntegerOption(o=>o.setName("month").setRequired(true))
-    .addIntegerOption(o=>o.setName("day").setRequired(true)),
 
-  new SlashCommandBuilder().setName("checkbirthday").setDescription("Check birthday")
-    .addUserOption(o=>o.setName("user").setRequired(true)),
+new SlashCommandBuilder()
+.setName("birthday")
+.setDescription("Set your birthday (MM/DD)")
+.addStringOption(o =>
+  o.setName("date")
+   .setDescription("Example: 3/18")
+   .setRequired(true)
+),
 
-  new SlashCommandBuilder().setName("setbirthdaychannel").setDescription("Set channel")
-    .addChannelOption(o=>o.setName("channel").setRequired(true)),
+new SlashCommandBuilder().setName("checkbirthday").setDescription("Check a birthday")
+.addUserOption(o=>o.setName("user").setDescription("User").setRequired(true)),
 
-  new SlashCommandBuilder().setName("setbirthdayrole").setDescription("Set role")
-    .addRoleOption(o=>o.setName("role").setRequired(true)),
+new SlashCommandBuilder().setName("birthdaylist").setDescription("List birthdays"),
 
-  new SlashCommandBuilder().setName("birthdaytest").setDescription("Test birthday")
+new SlashCommandBuilder().setName("setbirthdaychannel").setDescription("Set channel")
+.addChannelOption(o=>o.setName("channel").setDescription("Channel").setRequired(true)),
+
+new SlashCommandBuilder().setName("setbirthdayrole").setDescription("Set role")
+.addRoleOption(o=>o.setName("role").setDescription("Role").setRequired(true)),
+
+new SlashCommandBuilder().setName("birthdaytest").setDescription("Test birthday message")
+
 ]
 
-// Ready
-client.once("clientReady", async () => {
-  console.log(`Logged in as ${client.user.tag}`)
+// READY
+client.once("ready",async()=>{
 
-  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN)
+console.log(`Logged in as ${client.user.tag}`)
 
-  for (const cmd of commands) {
-    await rest.post(Routes.applicationCommands(CLIENT_ID), { body: cmd.toJSON() })
-  }
+const rest = new REST({version:"10"}).setToken(process.env.TOKEN)
 
-  setInterval(checkBirthdays, 60000)
+for(const cmd of commands){
+try{
+await rest.post(Routes.applicationCommands(CLIENT_ID),{body:cmd.toJSON()})
+console.log(`Registered ${cmd.name}`)
+}catch(e){console.log(e)}
+}
+
+setInterval(checkBirthdays,60000)
 })
 
-// Commands handler
-client.on("interactionCreate", async interaction => {
-  if (!interaction.isChatInputCommand()) return
+// INTERACTIONS
+client.on("interactionCreate",async interaction=>{
 
-  try {
+if(!interaction.isChatInputCommand()) return
 
-    if (interaction.commandName === "addbirthday") {
-      const m = interaction.options.getInteger("month")
-      const d = interaction.options.getInteger("day")
+await interaction.deferReply()
 
-      birthdays[interaction.user.id] = { month: m, day: d }
-      saveBirthdays()
+try{
 
-      return interaction.reply({ embeds: [embed("Saved", formatDate(m,d))] })
-    }
+// SET BIRTHDAY
+if(interaction.commandName==="birthday"){
 
-    if (interaction.commandName === "checkbirthday") {
-      const user = interaction.options.getUser("user")
+const input = interaction.options.getString("date")
 
-      if (!birthdays[user.id])
-        return interaction.reply({ embeds: [embed("Error", "No birthday")] })
+if(!/^\d{1,2}\/\d{1,2}$/.test(input)){
+return interaction.editReply({embeds:[embed("Error","Use format like 3/18")]})
+}
 
-      const b = birthdays[user.id]
-      const days = daysUntil(b.month, b.day)
+const [m,d] = input.split("/").map(Number)
 
-      let text = days === 0
-        ? "🎉 TODAY 🎉"
-        : `${formatDate(b.month,b.day)} - ${days} days away`
+if(m<1||m>12||d<1||d>31){
+return interaction.editReply({embeds:[embed("Error","Invalid date")]})
+}
 
-      return interaction.reply({
-        embeds: [embed(`${user.username}'s Birthday`, text)]
-      })
-    }
+birthdays[interaction.user.id]={month:m,day:d}
+saveBirthdays()
 
-    if (interaction.commandName === "setbirthdaychannel") {
-      settings.birthdayChannel = interaction.options.getChannel("channel").id
-      saveSettings()
-      return interaction.reply({ embeds: [embed("Set", "Channel saved")] })
-    }
+return interaction.editReply({
+embeds:[embed("Birthday Saved",`${cap(interaction.user.username)}'s birthday saved as ${formatDate(m,d)}`)]
+})
+}
 
-    if (interaction.commandName === "setbirthdayrole") {
-      settings.birthdayRole = interaction.options.getRole("role").id
-      saveSettings()
-      return interaction.reply({ embeds: [embed("Set", "Role saved")] })
-    }
+// CHECK
+if(interaction.commandName==="checkbirthday"){
 
-    if (interaction.commandName === "birthdaytest") {
-      return interaction.reply({
-        embeds: [embed("🎉 Happy Birthday!", `<@${interaction.user.id}> 🎉`)]
-      })
-    }
+const user=interaction.options.getUser("user")
 
-  } catch (e) {
-    console.log(e)
-    if (!interaction.replied)
-      interaction.reply({ content: "Error", ephemeral: true })
-  }
+if(!birthdays[user.id])
+return interaction.editReply({embeds:[embed("Error","No birthday saved")]})
+
+const b=birthdays[user.id]
+const days=daysUntil(b.month,b.day)
+
+return interaction.editReply({
+embeds:[embed(
+`${cap(user.username)}'s Birthday`,
+`${formatDate(b.month,b.day)} - ${days} ${days===1?"day":"days"} away`
+)]
+})
+}
+
+// LIST
+if(interaction.commandName==="birthdaylist"){
+
+const list=[]
+
+for(const id in birthdays){
+
+const user=await client.users.fetch(id).catch(()=>null)
+if(!user) continue
+
+const b=birthdays[id]
+
+list.push({
+name:cap(user.username),
+date:formatDate(b.month,b.day),
+days:daysUntil(b.month,b.day)
+})
+}
+
+list.sort((a,b)=>a.days-b.days)
+
+if(list.length===0)
+return interaction.editReply({embeds:[embed("List","No birthdays")]})
+
+let text=list.map(b=>`• ${b.name} — ${b.date} (${b.days} days)`).join("\n")
+
+return interaction.editReply({
+embeds:[embed("🎂 Birthday List",text)]
+})
+}
+
+// SET CHANNEL
+if(interaction.commandName==="setbirthdaychannel"){
+settings.birthdayChannel=interaction.options.getChannel("channel").id
+saveSettings()
+return interaction.editReply({embeds:[embed("Done","Channel set")]})
+}
+
+// SET ROLE
+if(interaction.commandName==="setbirthdayrole"){
+settings.birthdayRole=interaction.options.getRole("role").id
+saveSettings()
+return interaction.editReply({embeds:[embed("Done","Role set")]})
+}
+
+// TEST
+if(interaction.commandName==="birthdaytest"){
+return interaction.editReply({
+embeds:[embed("🎉 Happy Birthday!",`<@${interaction.user.id}> 🎉`)]
+})
+}
+
+}catch(e){
+console.log(e)
+interaction.editReply("Error")
+}
 })
 
-// 🔥 AUTO BIRTHDAY SYSTEM
-async function checkBirthdays() {
-  const now = new Date().toLocaleString("en-US", { timeZone: settings.timezone })
-  const today = new Date(now)
+// CHECK LOOP
+async function checkBirthdays(){
 
-  for (const guild of client.guilds.cache.values()) {
-    const channel = guild.channels.cache.get(settings.birthdayChannel)
-    if (!channel) continue
+const now=new Date()
 
-    for (const id in birthdays) {
-      const b = birthdays[id]
+for(const guild of client.guilds.cache.values()){
 
-      if (today.getMonth()+1 === b.month && today.getDate() === b.day) {
-        channel.send({
-          embeds: [embed("🎉 Happy Birthday!", `<@${id}> 🎉`)]
-        })
+const channel=guild.channels.cache.get(settings.birthdayChannel)
+if(!channel) continue
 
-        if (settings.birthdayRole) {
-          const member = await guild.members.fetch(id).catch(()=>null)
-          if (member) member.roles.add(settings.birthdayRole).catch(()=>{})
-        }
-      }
-    }
-  }
+for(const id in birthdays){
+
+const b=birthdays[id]
+
+if(now.getMonth()+1===b.month && now.getDate()===b.day){
+
+channel.send({
+embeds:[embed("🎉 Happy Birthday!",`<@${id}> 🎉`)]
+})
+
+if(settings.birthdayRole){
+const member=await guild.members.fetch(id).catch(()=>null)
+if(member) member.roles.add(settings.birthdayRole).catch(()=>{})
+}
+}
+}
+}
 }
 
 client.login(process.env.TOKEN)
