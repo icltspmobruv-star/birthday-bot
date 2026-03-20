@@ -45,12 +45,16 @@ if(target<now) target.setFullYear(target.getFullYear()+1)
 return Math.ceil((target-now)/(1000*60*60*24))
 }
 
-function embed(title,desc){
-return new EmbedBuilder()
-.setColor("#2b7fff")
-.setTitle(title)
-.setDescription(desc)
-}
+const http = require('http');
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Bot is alive');
+});
+
+server.listen(process.env.PORT || 10000, () => {
+  console.log('Web server running');
+});
 
 // COMMANDS
 const commands = [
@@ -101,7 +105,9 @@ client.on("interactionCreate",async interaction=>{
 
 if(!interaction.isChatInputCommand()) return
 
-await interaction.deferReply()
+if (!interaction.deferred && !interaction.replied) {
+  await interaction.deferReply().catch(() => {})
+}
 
 try{
 
@@ -201,9 +207,10 @@ embeds:[embed("🎉 Happy Birthday!",`<@${interaction.user.id}> 🎉`)]
 
 }catch(e){
 console.log(e)
-interaction.editReply("Error")
+
+if (!interaction.replied) {
+  interaction.reply({ content: "Error", ephemeral: true }).catch(() => {})
 }
-})
 
 // CHECK LOOP
 async function checkBirthdays(){
@@ -235,3 +242,6 @@ if(member) member.roles.add(settings.birthdayRole).catch(()=>{})
 }
 
 client.login(process.env.TOKEN)
+
+process.on('unhandledRejection', console.error)
+process.on('uncaughtException', console.error)
